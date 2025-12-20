@@ -164,6 +164,8 @@
     <string name="content">Content</string>
     <string name="show_age_restricted_content_title">Show age restricted content</string>
     <string name="show_age_restricted_content_summary">Show content possibly unsuitable for children because it has an age limit (like 18+)</string>
+    <string name="auto_add_to_single_playlist_title">Auto-add to single playlist</string>
+    <string name="auto_add_to_single_playlist_summary">Automatically add videos to the playlist when only one playlist exists, without showing the selection dialog</string>
     <string name="youtube_restricted_mode_enabled_title">Turn on YouTube\'s \"Restricted Mode\"</string>
     <string name="youtube_restricted_mode_enabled_summary">YouTube provides a \"Restricted Mode\" which hides potentially mature content</string>
     <string name="restricted_video">This video is age restricted.\n\nTurn on \"%1$s\" in the settings if you want to see it.</string>

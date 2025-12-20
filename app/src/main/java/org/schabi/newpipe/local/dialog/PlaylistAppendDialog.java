@@ -11,6 +11,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.preference.PreferenceManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -127,8 +128,13 @@ public final class PlaylistAppendDialog extends PlaylistDialog {
     }
 
     private void onPlaylistsReceived(@NonNull final List<PlaylistDuplicatesEntry> playlists) {
-        // If there's only one playlist, automatically add to it without showing the dialog
-        if (playlists.size() == 1 && playlistManager != null) {
+        // If auto-add setting is enabled and there's only one playlist,
+        // automatically add to it without showing the dialog
+        final boolean autoAddEnabled = PreferenceManager
+                .getDefaultSharedPreferences(requireContext())
+                .getBoolean(getString(R.string.auto_add_to_single_playlist_key), false);
+
+        if (autoAddEnabled && playlists.size() == 1 && playlistManager != null) {
             final List<StreamEntity> entities = getStreamEntities();
             if (entities != null) {
                 onPlaylistSelected(playlistManager, playlists.get(0), entities);
