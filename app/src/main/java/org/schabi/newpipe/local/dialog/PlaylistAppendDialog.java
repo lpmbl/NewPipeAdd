@@ -32,6 +32,7 @@ public final class PlaylistAppendDialog extends PlaylistDialog {
     private RecyclerView playlistRecyclerView;
     private LocalItemListAdapter playlistAdapter;
     private TextView playlistDuplicateIndicator;
+    private LocalPlaylistManager playlistManager;
 
     private final CompositeDisposable playlistDisposables = new CompositeDisposable();
 
@@ -61,8 +62,7 @@ public final class PlaylistAppendDialog extends PlaylistDialog {
     public void onViewCreated(@NonNull final View view, @Nullable final Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        final LocalPlaylistManager playlistManager =
-                new LocalPlaylistManager(NewPipeDatabase.getInstance(requireContext()));
+        playlistManager = new LocalPlaylistManager(NewPipeDatabase.getInstance(requireContext()));
 
         playlistAdapter = new LocalItemListAdapter(getActivity());
         playlistAdapter.setSelectedListener(selectedItem -> {
@@ -103,6 +103,7 @@ public final class PlaylistAppendDialog extends PlaylistDialog {
         playlistDisposables.clear();
         playlistRecyclerView = null;
         playlistAdapter = null;
+        playlistManager = null;
     }
 
     /*//////////////////////////////////////////////////////////////////////////
@@ -126,6 +127,15 @@ public final class PlaylistAppendDialog extends PlaylistDialog {
     }
 
     private void onPlaylistsReceived(@NonNull final List<PlaylistDuplicatesEntry> playlists) {
+        // If there's only one playlist, automatically add to it without showing the dialog
+        if (playlists.size() == 1 && playlistManager != null) {
+            final List<StreamEntity> entities = getStreamEntities();
+            if (entities != null) {
+                onPlaylistSelected(playlistManager, playlists.get(0), entities);
+                return;
+            }
+        }
+
         if (playlistAdapter != null
                 && playlistRecyclerView != null
                 && playlistDuplicateIndicator != null) {
