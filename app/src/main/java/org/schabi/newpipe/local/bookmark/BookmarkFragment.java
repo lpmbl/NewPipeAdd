@@ -11,6 +11,7 @@ import android.util.Pair;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -18,6 +19,8 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.FragmentManager;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import com.evernote.android.state.State;
 
@@ -123,6 +126,10 @@ public final class BookmarkFragment extends BaseLocalListFragment<List<PlaylistL
         super.initViews(rootView, savedInstanceState);
 
         itemListAdapter.setUseItemHandle(true);
+
+        final FloatingActionButton createPlaylistFab =
+                rootView.findViewById(R.id.create_playlist_fab);
+        createPlaylistFab.setOnClickListener(v -> showCreatePlaylistDialog());
     }
 
     @Override
@@ -551,6 +558,38 @@ public final class BookmarkFragment extends BaseLocalListFragment<List<PlaylistL
                 .setMessage(R.string.delete_playlist_prompt)
                 .setCancelable(true)
                 .setPositiveButton(R.string.delete, (dialog, i) -> deleteItem(item))
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private void showCreatePlaylistDialog() {
+        if (activity == null || localPlaylistManager == null) {
+            return;
+        }
+
+        final DialogEditTextBinding dialogBinding =
+                DialogEditTextBinding.inflate(getLayoutInflater());
+        dialogBinding.dialogEditText.setHint(R.string.name);
+        dialogBinding.dialogEditText.setInputType(InputType.TYPE_CLASS_TEXT);
+
+        new AlertDialog.Builder(activity)
+                .setTitle(R.string.create_playlist)
+                .setView(dialogBinding.getRoot())
+                .setPositiveButton(R.string.create, (dialog, which) -> {
+                    final String name = dialogBinding.dialogEditText.getText().toString().trim();
+                    if (!name.isEmpty()) {
+                        disposables.add(localPlaylistManager.createEmptyPlaylist(name)
+                                .observeOn(AndroidSchedulers.mainThread())
+                                .subscribe(
+                                        playlistId -> Toast.makeText(activity,
+                                                R.string.playlist_creation_success,
+                                                Toast.LENGTH_SHORT).show(),
+                                        throwable -> showError(new ErrorInfo(throwable,
+                                                UserAction.REQUESTED_BOOKMARK,
+                                                "Creating empty playlist"))
+                                ));
+                    }
+                })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
     }

@@ -63,6 +63,8 @@ import org.schabi.newpipe.extractor.linkhandler.ListLinkHandler;
 import org.schabi.newpipe.extractor.playlist.PlaylistInfo;
 import org.schabi.newpipe.extractor.stream.StreamInfo;
 import org.schabi.newpipe.local.dialog.PlaylistDialog;
+import org.schabi.newpipe.local.playlist.AddToPlaylistService;
+import org.schabi.newpipe.local.playlist.LocalPlaylistManager;
 import org.schabi.newpipe.player.PlayerType;
 import org.schabi.newpipe.player.helper.PlayerHelper;
 import org.schabi.newpipe.player.helper.PlayerHolder;
@@ -619,7 +621,37 @@ public class RouterActivity extends AppCompatActivity {
 
         if (selectedChoiceKey.equals(getString(R.string.add_to_playlist_key))) {
             selectionIsAddToPlaylist = true;
-            openAddToPlaylistDialog();
+
+            final boolean autoAddEnabled = PreferenceManager
+                    .getDefaultSharedPreferences(this)
+                    .getBoolean(getString(R.string.auto_add_to_single_playlist_key), false);
+
+            if (autoAddEnabled) {
+                final LocalPlaylistManager playlistManager =
+                        new LocalPlaylistManager(NewPipeDatabase.getInstance(this));
+                disposables.add(playlistManager.getPlaylists()
+                        .firstElement()
+                        .subscribeOn(Schedulers.io())
+                        .observeOn(AndroidSchedulers.mainThread())
+                        .subscribe(playlists -> {
+                            if (playlists.size() == 1) {
+                                final Intent serviceIntent = AddToPlaylistService.createIntent(
+                                        this, currentServiceId, currentUrl);
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    startForegroundService(serviceIntent);
+                                } else {
+                                    startService(serviceIntent);
+                                }
+                                finish();
+                            } else {
+                                openAddToPlaylistDialog();
+                            }
+                        }, throwable -> {
+                            openAddToPlaylistDialog();
+                        }));
+            } else {
+                openAddToPlaylistDialog();
+            }
             return;
         }
 

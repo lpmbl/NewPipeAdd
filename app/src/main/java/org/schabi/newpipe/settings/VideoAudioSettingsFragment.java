@@ -9,6 +9,7 @@ import android.text.format.DateUtils;
 import android.widget.Toast;
 
 import androidx.preference.ListPreference;
+import androidx.preference.Preference;
 
 import com.google.android.material.snackbar.Snackbar;
 
@@ -28,6 +29,7 @@ public class VideoAudioSettingsFragment extends BasePreferenceFragment {
 
         updateSeekOptions();
         updateResolutionOptions();
+        updateAutoAddToPlaylistVisibility();
         listener = (sharedPreferences, key) -> {
 
             // on M and above, if user chooses to minimise to popup player on exit
@@ -51,6 +53,8 @@ public class VideoAudioSettingsFragment extends BasePreferenceFragment {
                 updateSeekOptions();
             } else if (getString(R.string.show_higher_resolutions_key).equals(key)) {
                 updateResolutionOptions();
+            } else if (getString(R.string.preferred_open_action_key).equals(key)) {
+                updateAutoAddToPlaylistVisibility();
             }
         };
     }
@@ -175,6 +179,20 @@ public class VideoAudioSettingsFragment extends BasePreferenceFragment {
                             getString(R.string.new_seek_duration_toast, newDuration),
                             Toast.LENGTH_LONG);
             toast.show();
+        }
+    }
+
+    private void updateAutoAddToPlaylistVisibility() {
+        final String preferredAction = getPreferenceManager().getSharedPreferences()
+                .getString(getString(R.string.preferred_open_action_key),
+                        getString(R.string.preferred_open_action_default));
+
+        final Preference autoAddPref = findPreference(
+                getString(R.string.auto_add_to_single_playlist_key));
+        if (autoAddPref != null) {
+            final boolean isAddToPlaylist = getString(R.string.add_to_playlist_key)
+                    .equals(preferredAction);
+            autoAddPref.setVisible(isAddToPlaylist);
         }
     }
 

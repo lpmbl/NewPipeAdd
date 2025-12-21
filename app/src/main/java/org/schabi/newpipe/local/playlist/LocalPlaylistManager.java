@@ -56,6 +56,15 @@ public class LocalPlaylistManager {
         )).subscribeOn(Schedulers.io());
     }
 
+    public Maybe<Long> createEmptyPlaylist(final String name) {
+        return Maybe.fromCallable(() -> database.runInTransaction(() -> {
+                    final PlaylistEntity newPlaylist = new PlaylistEntity(name, false,
+                            PlaylistEntity.DEFAULT_THUMBNAIL_ID, -1);
+                    return playlistTable.insert(newPlaylist);
+                }
+        )).subscribeOn(Schedulers.io());
+    }
+
     public Maybe<List<Long>> appendToPlaylist(final long playlistId,
                                               final List<StreamEntity> streams) {
         return playlistStreamTable.getMaximumIndexOf(playlistId)
