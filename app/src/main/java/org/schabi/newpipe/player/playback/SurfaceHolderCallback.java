@@ -1,6 +1,7 @@
 package org.schabi.newpipe.player.playback;
 
 import android.content.Context;
+import android.util.Log;
 import android.view.SurfaceHolder;
 
 import com.google.android.exoplayer2.Player;
@@ -23,6 +24,7 @@ import com.google.android.exoplayer2.video.PlaceholderSurface;
  * https://github.com/google/ExoPlayer/issues/2703#issuecomment-300599981
  */
 public final class SurfaceHolderCallback implements SurfaceHolder.Callback {
+    private static final String TAG = "SurfaceHolderCallback";
 
     private final Context context;
     private final Player player;
@@ -31,10 +33,13 @@ public final class SurfaceHolderCallback implements SurfaceHolder.Callback {
     public SurfaceHolderCallback(final Context context, final Player player) {
         this.context = context;
         this.player = player;
+        Log.d(TAG, "SurfaceHolderCallback created");
     }
 
     @Override
     public void surfaceCreated(final SurfaceHolder holder) {
+        Log.d(TAG, "surfaceCreated() called, surface=" + holder.getSurface()
+                + ", isValid=" + holder.getSurface().isValid());
         player.setVideoSurface(holder.getSurface());
     }
 
@@ -43,10 +48,18 @@ public final class SurfaceHolderCallback implements SurfaceHolder.Callback {
                                final int format,
                                final int width,
                                final int height) {
+        Log.d(TAG, "surfaceChanged() called: format=" + format
+                + ", width=" + width + ", height=" + height);
+        // Reconnect surface if it became valid - fixes black screen when switching videos
+        if (holder.getSurface().isValid()) {
+            Log.d(TAG, "surfaceChanged: reconnecting valid surface to player");
+            player.setVideoSurface(holder.getSurface());
+        }
     }
 
     @Override
     public void surfaceDestroyed(final SurfaceHolder holder) {
+        Log.d(TAG, "surfaceDestroyed() called, setting placeholder surface");
         if (placeholderSurface == null) {
             placeholderSurface = PlaceholderSurface.newInstanceV17(context, false);
         }
@@ -54,6 +67,7 @@ public final class SurfaceHolderCallback implements SurfaceHolder.Callback {
     }
 
     public void release() {
+        Log.d(TAG, "release() called");
         if (placeholderSurface != null) {
             placeholderSurface.release();
             placeholderSurface = null;

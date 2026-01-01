@@ -800,6 +800,7 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
     @Override
     public void onBlocked() {
         super.onBlocked();
+        Log.d(TAG, "onBlocked() called, surfaceIsSetup=" + surfaceIsSetup);
 
         // if we are e.g. switching players, hide controls
         hideControls(DEFAULT_CONTROLS_DURATION, 0);
@@ -820,6 +821,15 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
     @Override
     public void onPlaying() {
         super.onPlaying();
+
+        // Fix for black screen when switching videos on some devices
+        if (player.getExoPlayer() != null) {
+            if (binding.surfaceView.getHolder().getSurface().isValid()) {
+                player.getExoPlayer().setVideoSurfaceHolder(binding.surfaceView.getHolder());
+            } else {
+                forceReconnectSurface();
+            }
+        }
 
         updateStreamRelatedViews();
 
@@ -846,6 +856,7 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
     @Override
     public void onBuffering() {
         super.onBuffering();
+        Log.d(TAG, "onBuffering() called, surfaceIsSetup=" + surfaceIsSetup);
         binding.loadingPanel.setBackgroundColor(Color.TRANSPARENT);
         binding.loadingPanel.setVisibility(View.VISIBLE);
         binding.getRoot().setKeepScreenOn(true);
@@ -1000,6 +1011,8 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
     @Override
     public void onRenderedFirstFrame() {
         super.onRenderedFirstFrame();
+        Log.d(TAG, "onRenderedFirstFrame() called, surfaceIsSetup=" + surfaceIsSetup
+                + ", surfaceValid=" + binding.surfaceView.getHolder().getSurface().isValid());
         //TODO check if this causes black screen when switching to fullscreen
         animate(binding.surfaceForeground, false, DEFAULT_CONTROLS_DURATION);
     }
@@ -1574,8 +1587,14 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
      * be called many times and even while the UI is in unready states.
      */
     public void setupVideoSurfaceIfNeeded() {
-        if (!surfaceIsSetup && player.getExoPlayer() != null
-                && binding.getRoot().getParent() != null) {
+        final boolean hasExoPlayer = player.getExoPlayer() != null;
+        final boolean hasParent = binding.getRoot().getParent() != null;
+        final boolean surfaceValid = binding.surfaceView.getHolder().getSurface().isValid();
+        Log.d(TAG, "setupVideoSurfaceIfNeeded() called: surfaceIsSetup=" + surfaceIsSetup
+                + ", hasExoPlayer=" + hasExoPlayer + ", hasParent=" + hasParent
+                + ", surfaceValid=" + surfaceValid);
+
+        if (!surfaceIsSetup && hasExoPlayer && hasParent) {
             // make sure there is nothing left over from previous calls
             clearVideoSurface();
 
@@ -1588,17 +1607,76 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
                 if (binding.surfaceView.getHolder().getSurface().isValid()) {
                     // initially set the surface manually otherwise
                     // onRenderedFirstFrame() will not be called
+                    Log.d(TAG, "setupVideoSurfaceIfNeeded: setting video surface holder");
                     player.getExoPlayer().setVideoSurfaceHolder(binding.surfaceView.getHolder());
+                } else {
+                    Log.w(TAG, "setupVideoSurfaceIfNeeded: surface NOT valid");
                 }
             } else {
                 player.getExoPlayer().setVideoSurfaceView(binding.surfaceView);
             }
 
             surfaceIsSetup = true;
+            Log.d(TAG, "setupVideoSurfaceIfNeeded: surface setup complete");
+        } else {
+            Log.d(TAG, "setupVideoSurfaceIfNeeded: skipped (conditions not met)");
         }
     }
 
+    /**
+     * Fix for black screen when switching videos on some devices (e.g., Samsung Galaxy S25).
+     * The ExpandableSurfaceView requires valid heights and aspect ratio to measure properly.
+     * Without these, onMeasure() returns early with width=0, preventing surface creation.
+     */
+    private void forceReconnectSurface() {
+        final int svW = binding.surfaceView.getWidth();
+
+        // If width is 0, the ExpandableSurfaceView needs aspect ratio/heights set
+        if (svW == 0 && binding.surfaceView.getParent() instanceof View) {
+            final View parent = (View) binding.surfaceView.getParent();
+            final int parentH = parent.getHeight();
+
+            // Ensure heights are set for ExpandableSurfaceView
+            if (parentH > 0) {
+                binding.surfaceView.setHeights(parentH, parentH);
+            }
+
+            // Ensure aspect ratio is set - get from ExoPlayer if available
+            float aspectRatio = 16.0f / 9.0f; // default
+            if (player.getExoPlayer() != null) {
+                final VideoSize videoSize = player.getExoPlayer().getVideoSize();
+                if (videoSize.width > 0 && videoSize.height > 0) {
+                    aspectRatio = ((float) videoSize.width) / videoSize.height;
+                }
+            }
+            binding.surfaceView.setAspectRatio(aspectRatio);
+
+            // Force layout to trigger surface creation
+            binding.surfaceView.requestLayout();
+        }
+
+        // Retry connecting surface after layout completes
+        retryConnectSurface(0);
+    }
+
+    private void retryConnectSurface(final int attempt) {
+        if (attempt >= 5) {
+            return;
+        }
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (player.getExoPlayer() == null) {
+                return;
+            }
+            if (binding.surfaceView.getHolder().getSurface().isValid()) {
+                player.getExoPlayer().setVideoSurfaceView(binding.surfaceView);
+            } else {
+                retryConnectSurface(attempt + 1);
+            }
+        }, 100);
+    }
+
     private void clearVideoSurface() {
+        Log.d(TAG, "clearVideoSurface() called, surfaceHolderCallback=" + surfaceHolderCallback);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M // >=API23
                 && surfaceHolderCallback != null) {
             binding.surfaceView.getHolder().removeCallback(surfaceHolderCallback);
@@ -1607,6 +1685,7 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
         }
         Optional.ofNullable(player.getExoPlayer()).ifPresent(ExoPlayer::clearVideoSurface);
         surfaceIsSetup = false;
+        Log.d(TAG, "clearVideoSurface() done, surfaceIsSetup=" + surfaceIsSetup);
     }
     //endregion
 
