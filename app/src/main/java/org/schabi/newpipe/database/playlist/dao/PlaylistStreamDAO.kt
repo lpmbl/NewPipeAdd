@@ -123,4 +123,7 @@ interface PlaylistStreamDAO : BasicDAO<PlaylistStreamEntity> {
         """
     )
     fun getPlaylistDuplicatesMetadata(streamUrl: String): Flowable<MutableList<PlaylistDuplicatesEntry>>
+
+    @Query("SELECT stream_id FROM playlist_stream_join WHERE playlist_id = :playlistId")
+    fun getStreamIdsInPlaylist(playlistId: Long): List<Long>
 }

@@ -130,7 +130,7 @@ public class AddToPlaylistService extends IntentService {
                     .subscribeOn(Schedulers.io())
                     .observeOn(AndroidSchedulers.mainThread())
                     .subscribe(
-                            ignored -> showSuccessToast(playlist),
+                            insertedIds -> showSuccessToast(insertedIds),
                             throwable -> handleError(throwable, info.getUrl(), info.getServiceId())
                     );
         } else {
@@ -142,11 +142,11 @@ public class AddToPlaylistService extends IntentService {
         }
     }
 
-    private void showSuccessToast(final PlaylistDuplicatesEntry playlist) {
+    private void showSuccessToast(final List<Long> insertedIds) {
         final String toastText;
-        if (playlist.getTimesStreamIsContained() > 0) {
-            toastText = getString(R.string.playlist_add_stream_success_duplicate,
-                    playlist.getTimesStreamIsContained());
+        if (insertedIds.isEmpty()) {
+            // Video was a duplicate and skipped
+            toastText = getString(R.string.playlist_add_stream_skipped_duplicate);
         } else {
             toastText = getString(R.string.playlist_add_stream_success);
         }

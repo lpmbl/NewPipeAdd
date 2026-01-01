@@ -162,29 +162,28 @@ public final class PlaylistAppendDialog extends PlaylistDialog {
                                     @NonNull final PlaylistDuplicatesEntry playlist,
                                     @NonNull final List<StreamEntity> streams) {
 
-        final String toastText;
-        if (playlist.getTimesStreamIsContained() > 0) {
-            toastText = getString(R.string.playlist_add_stream_success_duplicate,
-                    playlist.getTimesStreamIsContained());
-        } else {
-            toastText = getString(R.string.playlist_add_stream_success);
-        }
-
-        final Toast successToast = Toast.makeText(getContext(), toastText, Toast.LENGTH_SHORT);
-
         playlistDisposables.add(manager.appendToPlaylist(playlist.getUid(), streams)
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribe(ignored -> {
-                    successToast.show();
+                .subscribe(insertedIds -> {
+                    final String toastText;
+                    if (insertedIds.isEmpty()) {
+                        // All streams were duplicates and skipped
+                        toastText = getString(R.string.playlist_add_stream_skipped_duplicate);
+                    } else {
+                        toastText = getString(R.string.playlist_add_stream_success);
+                    }
 
-                    if (playlist.getThumbnailStreamId() != null
+                    Toast.makeText(getContext(), toastText, Toast.LENGTH_SHORT).show();
+
+                    if (!insertedIds.isEmpty()
+                            && playlist.getThumbnailStreamId() != null
                             && playlist.getThumbnailStreamId() == DEFAULT_THUMBNAIL_ID
                     ) {
                         playlistDisposables.add(manager
                                 .changePlaylistThumbnail(playlist.getUid(), streams.get(0).getUid(),
                                         false)
                                 .observeOn(AndroidSchedulers.mainThread())
-                                .subscribe(ignore -> successToast.show()));
+                                .subscribe());
                     }
                 }));
 

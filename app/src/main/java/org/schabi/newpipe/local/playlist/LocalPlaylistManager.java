@@ -71,7 +71,22 @@ public class LocalPlaylistManager {
                 .firstElement()
                 .map(maxJoinIndex -> database.runInTransaction(() -> {
                             final List<Long> streamIds = streamTable.upsertAll(streams);
-                            return insertJoinEntities(playlistId, streamIds, maxJoinIndex + 1);
+
+                            // Filter out streams that are already in the playlist
+                            final List<Long> existingStreamIds =
+                                    playlistStreamTable.getStreamIdsInPlaylist(playlistId);
+                            final List<Long> newStreamIds = new ArrayList<>();
+                            for (final Long streamId : streamIds) {
+                                if (!existingStreamIds.contains(streamId)) {
+                                    newStreamIds.add(streamId);
+                                }
+                            }
+
+                            if (newStreamIds.isEmpty()) {
+                                return new ArrayList<Long>();
+                            }
+
+                            return insertJoinEntities(playlistId, newStreamIds, maxJoinIndex + 1);
                         }
                 )).subscribeOn(Schedulers.io());
     }
