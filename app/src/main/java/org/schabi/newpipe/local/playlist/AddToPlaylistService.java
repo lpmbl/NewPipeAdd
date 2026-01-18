@@ -1,8 +1,11 @@
 package org.schabi.newpipe.local.playlist;
 
-import android.app.IntentService;
+import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.Looper;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
@@ -23,7 +26,7 @@ import org.schabi.newpipe.util.ExtractorHelper;
 import java.util.List;
 
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
-import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 
 /**
@@ -31,17 +34,14 @@ import io.reactivex.rxjava3.schedulers.Schedulers;
  * Allowing the user to leave the source app (e.g., YouTube) immediately
  * after sharing.
  */
-public class AddToPlaylistService extends IntentService {
+public class AddToPlaylistService extends Service {
 
     public static final String KEY_SERVICE_ID = "key_service_id";
     public static final String KEY_URL = "key_url";
     private static final int NOTIFICATION_ID = 457;
 
-    private Disposable disposable;
-
-    public AddToPlaylistService() {
-        super(AddToPlaylistService.class.getSimpleName());
-    }
+    private final CompositeDisposable disposables = new CompositeDisposable();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     /**
      * Creates an intent to start this service with the given parameters.
@@ -67,52 +67,58 @@ public class AddToPlaylistService extends IntentService {
     }
 
     @Override
-    protected void onHandleIntent(@Nullable final Intent intent) {
+    public int onStartCommand(@Nullable final Intent intent, final int flags, final int startId) {
         if (intent == null) {
-            return;
+            stopSelf();
+            return START_NOT_STICKY;
         }
 
         final int serviceId = intent.getIntExtra(KEY_SERVICE_ID, -1);
         final String url = intent.getStringExtra(KEY_URL);
 
         if (serviceId == -1 || url == null) {
-            return;
+            stopSelf();
+            return START_NOT_STICKY;
         }
 
         addToPlaylist(serviceId, url);
+        return START_NOT_STICKY;
+    }
+
+    @Nullable
+    @Override
+    public IBinder onBind(final Intent intent) {
+        return null;
     }
 
     private void addToPlaylist(final int serviceId, final String url) {
-        // Fetch stream info
-        disposable = ExtractorHelper.getStreamInfo(serviceId, url, false)
+        disposables.add(ExtractorHelper.getStreamInfo(serviceId, url, false)
                 .subscribeOn(Schedulers.io())
                 .observeOn(Schedulers.io())
                 .subscribe(
                         info -> handleStreamInfo(info, url),
-                        throwable -> handleError(throwable, url, serviceId)
-                );
-
-        try {
-            while (disposable != null && !disposable.isDisposed()) {
-                Thread.sleep(100);
-            }
-        } catch (final InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+                        throwable -> {
+                            handleError(throwable, url, serviceId);
+                            stopSelf();
+                        }
+                ));
     }
 
     private void handleStreamInfo(final StreamInfo info, final String url) {
         final LocalPlaylistManager playlistManager =
                 new LocalPlaylistManager(NewPipeDatabase.getInstance(this));
 
-        playlistManager.getPlaylistDuplicates(url)
+        disposables.add(playlistManager.getPlaylistDuplicates(url)
                 .firstElement()
                 .subscribeOn(Schedulers.io())
                 .observeOn(Schedulers.io())
                 .subscribe(
                         playlists -> handlePlaylists(playlists, info, playlistManager),
-                        throwable -> handleError(throwable, url, info.getServiceId())
-                );
+                        throwable -> {
+                            handleError(throwable, url, info.getServiceId());
+                            stopSelf();
+                        }
+                ));
     }
 
     private void handlePlaylists(final List<PlaylistDuplicatesEntry> playlists,
@@ -126,19 +132,22 @@ public class AddToPlaylistService extends IntentService {
             final PlaylistDuplicatesEntry playlist = playlists.get(0);
             final List<StreamEntity> streams = List.of(new StreamEntity(info));
 
-            playlistManager.appendToPlaylist(playlist.getUid(), streams)
+            disposables.add(playlistManager.appendToPlaylist(playlist.getUid(), streams)
                     .subscribeOn(Schedulers.io())
                     .observeOn(AndroidSchedulers.mainThread())
                     .subscribe(
-                            insertedIds -> showSuccessToast(insertedIds),
-                            throwable -> handleError(throwable, info.getUrl(), info.getServiceId())
-                    );
+                            insertedIds -> {
+                                showSuccessToast(insertedIds);
+                                stopSelf();
+                            },
+                            throwable -> {
+                                handleError(throwable, info.getUrl(), info.getServiceId());
+                                stopSelf();
+                            }
+                    ));
         } else {
             showToastOnMainThread(getString(R.string.playlist_add_stream_multiple_playlists));
-        }
-
-        if (disposable != null) {
-            disposable.dispose();
+            stopSelf();
         }
     }
 
@@ -150,11 +159,11 @@ public class AddToPlaylistService extends IntentService {
         } else {
             toastText = getString(R.string.playlist_add_stream_success);
         }
-        showToastOnMainThread(toastText);
+        Toast.makeText(getApplicationContext(), toastText, Toast.LENGTH_SHORT).show();
     }
 
     private void showToastOnMainThread(final String message) {
-        new android.os.Handler(android.os.Looper.getMainLooper()).post(() ->
+        mainHandler.post(() ->
                 Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show()
         );
     }
@@ -167,19 +176,13 @@ public class AddToPlaylistService extends IntentService {
                 serviceId,
                 url
         ));
-
-        if (disposable != null) {
-            disposable.dispose();
-        }
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
+        disposables.clear();
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE);
-        if (disposable != null) {
-            disposable.dispose();
-        }
     }
 
     private NotificationCompat.Builder createNotification() {

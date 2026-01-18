@@ -104,6 +104,10 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
     // other constants (TODO remove playback speeds and use normal menu for popup, too)
     private static final float[] PLAYBACK_SPEEDS = {0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f};
 
+    // Surface reconnection constants
+    private static final int MAX_SURFACE_RETRY_ATTEMPTS = 5;
+    private static final long SURFACE_RETRY_DELAY_MS = 100;
+
     private enum PlayButtonAction {
         PLAY, PAUSE, REPLAY
     }
@@ -800,7 +804,6 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
     @Override
     public void onBlocked() {
         super.onBlocked();
-        Log.d(TAG, "onBlocked() called, surfaceIsSetup=" + surfaceIsSetup);
 
         // if we are e.g. switching players, hide controls
         hideControls(DEFAULT_CONTROLS_DURATION, 0);
@@ -856,7 +859,6 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
     @Override
     public void onBuffering() {
         super.onBuffering();
-        Log.d(TAG, "onBuffering() called, surfaceIsSetup=" + surfaceIsSetup);
         binding.loadingPanel.setBackgroundColor(Color.TRANSPARENT);
         binding.loadingPanel.setVisibility(View.VISIBLE);
         binding.getRoot().setKeepScreenOn(true);
@@ -1011,8 +1013,6 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
     @Override
     public void onRenderedFirstFrame() {
         super.onRenderedFirstFrame();
-        Log.d(TAG, "onRenderedFirstFrame() called, surfaceIsSetup=" + surfaceIsSetup
-                + ", surfaceValid=" + binding.surfaceView.getHolder().getSurface().isValid());
         //TODO check if this causes black screen when switching to fullscreen
         animate(binding.surfaceForeground, false, DEFAULT_CONTROLS_DURATION);
     }
@@ -1589,10 +1589,6 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
     public void setupVideoSurfaceIfNeeded() {
         final boolean hasExoPlayer = player.getExoPlayer() != null;
         final boolean hasParent = binding.getRoot().getParent() != null;
-        final boolean surfaceValid = binding.surfaceView.getHolder().getSurface().isValid();
-        Log.d(TAG, "setupVideoSurfaceIfNeeded() called: surfaceIsSetup=" + surfaceIsSetup
-                + ", hasExoPlayer=" + hasExoPlayer + ", hasParent=" + hasParent
-                + ", surfaceValid=" + surfaceValid);
 
         if (!surfaceIsSetup && hasExoPlayer && hasParent) {
             // make sure there is nothing left over from previous calls
@@ -1607,19 +1603,13 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
                 if (binding.surfaceView.getHolder().getSurface().isValid()) {
                     // initially set the surface manually otherwise
                     // onRenderedFirstFrame() will not be called
-                    Log.d(TAG, "setupVideoSurfaceIfNeeded: setting video surface holder");
                     player.getExoPlayer().setVideoSurfaceHolder(binding.surfaceView.getHolder());
-                } else {
-                    Log.w(TAG, "setupVideoSurfaceIfNeeded: surface NOT valid");
                 }
             } else {
                 player.getExoPlayer().setVideoSurfaceView(binding.surfaceView);
             }
 
             surfaceIsSetup = true;
-            Log.d(TAG, "setupVideoSurfaceIfNeeded: surface setup complete");
-        } else {
-            Log.d(TAG, "setupVideoSurfaceIfNeeded: skipped (conditions not met)");
         }
     }
 
@@ -1660,7 +1650,7 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
     }
 
     private void retryConnectSurface(final int attempt) {
-        if (attempt >= 5) {
+        if (attempt >= MAX_SURFACE_RETRY_ATTEMPTS) {
             return;
         }
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
@@ -1668,15 +1658,14 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
                 return;
             }
             if (binding.surfaceView.getHolder().getSurface().isValid()) {
-                player.getExoPlayer().setVideoSurfaceView(binding.surfaceView);
+                player.getExoPlayer().setVideoSurfaceHolder(binding.surfaceView.getHolder());
             } else {
                 retryConnectSurface(attempt + 1);
             }
-        }, 100);
+        }, SURFACE_RETRY_DELAY_MS);
     }
 
     private void clearVideoSurface() {
-        Log.d(TAG, "clearVideoSurface() called, surfaceHolderCallback=" + surfaceHolderCallback);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M // >=API23
                 && surfaceHolderCallback != null) {
             binding.surfaceView.getHolder().removeCallback(surfaceHolderCallback);
@@ -1685,7 +1674,6 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
         }
         Optional.ofNullable(player.getExoPlayer()).ifPresent(ExoPlayer::clearVideoSurface);
         surfaceIsSetup = false;
-        Log.d(TAG, "clearVideoSurface() done, surfaceIsSetup=" + surfaceIsSetup);
     }
     //endregion
 
